@@ -19,11 +19,22 @@ public static class MauiProgram
 #if DEBUG
 		builder.Logging.AddDebug();
 #endif
-		builder.Services.AddSingleton<MonkeyService>();
+
+        builder.Services.AddSingleton<IConnectivity>(Connectivity.Current);
+        builder.Services.AddSingleton<IGeolocation>(Geolocation.Default);
+        builder.Services.AddSingleton<IMap>(Map.Default);
+
+        // AddSingleton = there is only ever going to be one of that thing
+        // AddTransient = an instance of that thing will be created everytime it is called
+
+        builder.Services.AddSingleton<MonkeyService>();
 
 		builder.Services.AddSingleton<MonkeysViewModel>();
+		builder.Services.AddTransient<MonkeyDetailsViewModel>();
 
 		builder.Services.AddSingleton<MainPage>();
+		builder.Services.AddTransient<DetailsPage>();
+
 
 		return builder.Build();
 	}

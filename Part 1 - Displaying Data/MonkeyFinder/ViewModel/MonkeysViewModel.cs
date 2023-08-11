@@ -6,14 +6,20 @@ public partial class MonkeysViewModel : BaseViewModel
 {
     MonkeyService monkeyService;
     public ObservableCollection<Monkey> Monkeys { get; } = new();
-        
-    public MonkeysViewModel(MonkeyService monkeyService)
+
+    IConnectivity connectivity;
+    IGeolocation geolocation;
+
+    public MonkeysViewModel(MonkeyService monkeyService, IConnectivity connectivity, IGeolocation geolocation)
     {
         Title = "Monkey Finder";
         this.monkeyService = monkeyService;
-
-        
+        this.connectivity = connectivity;
+        this.geolocation = geolocation;
     }
+
+    [ObservableProperty]
+    bool isRefreshing = false;
 
     [RelayCommand] //>>> RelayCommand is replacing ICommand >>> https://github.com/CommunityToolkit/dotnet/releases/tag/v8.0.0-preview4
     async Task GetMonkeysAsync()
@@ -23,6 +29,13 @@ public partial class MonkeysViewModel : BaseViewModel
 
         try
         {
+            if(connectivity.NetworkAccess != NetworkAccess.Internet)
+            {
+                await Shell.Current.DisplayAlert("No connectivity!",
+                    $"Please check internet and try again.", "OK");
+                return;
+            }
+
             IsBusy = true;
             var monkeys = await monkeyService.GetMonkeys();
 
@@ -41,6 +54,61 @@ public partial class MonkeysViewModel : BaseViewModel
         finally
         {
             IsBusy = false;
+            IsRefreshing = false;
+        }
+    }
+
+    [RelayCommand]
+    async Task GoToDetailsAsync(Monkey monkey)
+     {
+        if (monkey is null)
+            return;
+
+        await Shell.Current.GoToAsync($"{nameof(DetailsPage)}", true
+            , new Dictionary<string, object>
+            {
+                { "Monkey", monkey }
+            });
+    }
+
+    [RelayCommand]
+    async Task GetClosestMonkeyAsync()
+    {
+        if(IsBusy || Monkeys.Count is 0) 
+            return;
+
+        try
+        {
+            var location = await geolocation.GetLocationAsync();
+            if(location is null)
+            {
+                location = await geolocation.GetLocationAsync(
+                    new GeolocationRequest
+                    {
+                        DesiredAccuracy = GeolocationAccuracy.Medium
+                        , Timeout = TimeSpan.FromSeconds(30)
+                    });
+            }
+
+            if (location is null)
+                return;
+
+            var first = Monkeys.OrderBy(m =>
+            location.CalculateDistance(m.Latitude, m.Longitude, DistanceUnits.Kilometers)).FirstOrDefault();
+
+            if(first is null) 
+                return;
+
+            await Shell.Current.DisplayAlert("Closest Monkey",
+                $"{first.Name} in {first.Location}", "OK");
+
+
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(ex);
+            await Shell.Current.DisplayAlert("Error!",
+                $"Unable to get closest monkey: {ex.Message}", "OK");
         }
     }
 }
